@@ -82,6 +82,8 @@ function editProvinces() {
       if (!p.i || p.removed) return;
       p.area = p.rural = p.urban = 0;
       p.burgs = [];
+      p.dominantCulture = 0;
+      p.dominantCultureShare = 0;
       if ((p.burg && !burgs[p.burg]) || burgs[p.burg].removed) p.burg = 0;
     });
 
@@ -95,6 +97,49 @@ function editProvinces() {
       provinces[p].urban += burgs[cells.burg[i]].population;
       provinces[p].burgs.push(cells.burg[i]);
     }
+
+    // compute dominant culture per province (by population share)
+    provinces.forEach(p => {
+      if (!p.i || p.removed) return;
+      const culturePop = {}; // cultureId -> population points
+      let total = 0;
+
+      // rural cells
+      for (const ci of cells.i) {
+        if (cells.province[ci] !== p.i) continue;
+        const cid = cells.culture[ci] || 0;
+        const amount = (cells.pop[ci] || 0) * populationRate;
+        culturePop[cid] = (culturePop[cid] || 0) + amount;
+        total += amount;
+      }
+
+      // urban (burgs)
+      p.burgs.forEach(bid => {
+        const b = burgs[bid];
+        if (!b) return;
+        const cid = b.culture || 0;
+        const amount = (b.population || 0) * populationRate * urbanization;
+        culturePop[cid] = (culturePop[cid] || 0) + amount;
+        total += amount;
+      });
+
+      if (total > 0) {
+        let maxCid = 0;
+        let maxVal = 0;
+        for (const [cidStr, val] of Object.entries(culturePop)) {
+          const cid = +cidStr;
+          if (val > maxVal) {
+            maxVal = val;
+            maxCid = cid;
+          }
+        }
+        p.dominantCulture = maxCid;
+        p.dominantCultureShare = maxVal / total;
+      } else {
+        p.dominantCulture = 0;
+        p.dominantCultureShare = 0;
+      }
+    });
 
     provinces.forEach(p => {
       if (!p.i || p.removed) return;
@@ -170,6 +215,7 @@ function editProvinces() {
         >
           ${p.burgs.length ? getCapitalOptions(p.burgs, p.burg) : ""}
         </select>
+        ${p.dominantCulture ? `<div data-tip="Dominant culture" class="provinceDominantCulture hide" style="display:inline-flex;align-items:center;gap:6px"><fill-box fill="${pack.cultures[p.dominantCulture].color}"></fill-box><div style="font-size:0.9em;white-space:nowrap">${pack.cultures[p.dominantCulture].name} (${rn(p.dominantCultureShare*100,1)}%)</div></div>` : `<div data-tip="Dominant culture" class="provinceDominantCulture hide placeholder" style="display:inline-block;width:1.6em;height:1.6em"></div>`}
         <input data-tip="Province owner" class="provinceOwner" value="${stateName}" disabled">
         <span data-tip="Click to overview province burgs" style="padding-right: 1px" class="icon-dot-circled pointer hide"></span>
         <div data-tip="Burgs count" class="provinceBurgs hide">${p.burgs.length}</div>
